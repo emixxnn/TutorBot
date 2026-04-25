@@ -30,9 +30,29 @@ END;
 DECLARE
     v_exists NUMBER;
 BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_sequences WHERE sequence_name = 'SEQ_SKILLS';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_SKILLS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
     SELECT COUNT(*) INTO v_exists FROM user_sequences WHERE sequence_name = 'SEQ_TOPICS';
     IF v_exists = 0 THEN
         EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_TOPICS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_sequences WHERE sequence_name = 'SEQ_LEARNING_PATHS';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_LEARNING_PATHS START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE';
     END IF;
 END;
 /
@@ -105,6 +125,23 @@ END;
 DECLARE
     v_exists NUMBER;
 BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_tables WHERE table_name = 'SKILLS';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE '
+            CREATE TABLE SKILLS (
+                ID     NUMBER        NOT NULL,
+                NAME   VARCHAR2(255) NOT NULL,
+                ACTIVE NUMBER(1) DEFAULT 1 NOT NULL,
+                CONSTRAINT PK_SKILLS PRIMARY KEY (ID)
+            )';
+    END IF;
+END;
+/
+
+-- 4. TOPICS  (evaluator-service / gap-detector-service → Topic.java)
+DECLARE
+    v_exists NUMBER;
+BEGIN
     SELECT COUNT(*) INTO v_exists FROM user_tables WHERE table_name = 'TOPICS';
     IF v_exists = 0 THEN
         EXECUTE IMMEDIATE '
@@ -112,13 +149,31 @@ BEGIN
                 ID        NUMBER        NOT NULL,
                 NAME      VARCHAR2(255) NOT NULL,
                 COURSE_ID NUMBER,
+                ACTIVE    NUMBER(1) DEFAULT 1 NOT NULL,
+                SKILL_ID  NUMBER,
                 CONSTRAINT PK_TOPICS PRIMARY KEY (ID)
             )';
     END IF;
 END;
 /
 
--- 4. SUBTOPICS  (gap-detector-service → Subtopic.java)
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_tables WHERE table_name = 'LEARNING_PATHS';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE '
+            CREATE TABLE LEARNING_PATHS (
+                ID         NUMBER        NOT NULL,
+                STUDENT_ID VARCHAR2(255) NOT NULL,
+                TOPIC_ID    NUMBER        NOT NULL,
+                CONSTRAINT PK_LEARNING_PATHS PRIMARY KEY (ID)
+            )';
+    END IF;
+END;
+/
+
+-- 5. SUBTOPICS  (gap-detector-service → Subtopic.java)
 DECLARE
     v_exists NUMBER;
 BEGIN
@@ -158,6 +213,32 @@ BEGIN
 END;
 /
 
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists
+    FROM user_tab_cols
+    WHERE table_name = 'TOPICS' AND column_name = 'ACTIVE';
+
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE TOPICS ADD (ACTIVE NUMBER(1) DEFAULT 1 NOT NULL)';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists
+    FROM user_tab_cols
+    WHERE table_name = 'TOPICS' AND column_name = 'SKILL_ID';
+
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE TOPICS ADD (SKILL_ID NUMBER)';
+    END IF;
+END;
+/
+
 -- =====================  FOREIGN KEYS (idempotent)  ==========
 
 DECLARE
@@ -173,9 +254,29 @@ END;
 DECLARE
     v_exists NUMBER;
 BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_constraints WHERE constraint_name = 'FK_TOPICS_SKILL';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE TOPICS ADD CONSTRAINT FK_TOPICS_SKILL FOREIGN KEY (SKILL_ID) REFERENCES SKILLS(ID)';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
     SELECT COUNT(*) INTO v_exists FROM user_constraints WHERE constraint_name = 'FK_SUBTOPICS_TOPIC';
     IF v_exists = 0 THEN
         EXECUTE IMMEDIATE 'ALTER TABLE SUBTOPICS ADD CONSTRAINT FK_SUBTOPICS_TOPIC FOREIGN KEY (TOPIC_ID) REFERENCES TOPICS(ID)';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_constraints WHERE constraint_name = 'FK_LEARNING_PATHS_TOPIC';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE LEARNING_PATHS ADD CONSTRAINT FK_LEARNING_PATHS_TOPIC FOREIGN KEY (TOPIC_ID) REFERENCES TOPICS(ID)';
     END IF;
 END;
 /
@@ -228,6 +329,16 @@ BEGIN
     SELECT COUNT(*) INTO v_exists FROM user_indexes WHERE index_name = 'IDX_EVAL_TOPIC';
     IF v_exists = 0 THEN
         EXECUTE IMMEDIATE 'CREATE INDEX IDX_EVAL_TOPIC ON EVALUATIONS(TOPIC_ID)';
+    END IF;
+END;
+/
+
+DECLARE
+    v_exists NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_exists FROM user_indexes WHERE index_name = 'IDX_LEARNING_PATHS_STUDENT_TOPIC';
+    IF v_exists = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE UNIQUE INDEX IDX_LEARNING_PATHS_STUDENT_TOPIC ON LEARNING_PATHS(STUDENT_ID, TOPIC_ID)';
     END IF;
 END;
 /
